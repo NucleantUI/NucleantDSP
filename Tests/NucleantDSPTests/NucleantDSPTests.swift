@@ -123,6 +123,38 @@ private func impulse(_ frames: Int, channels: Int = 1) -> [Float] {
         }
     }
 
+    @Test func envelopeAttackDecaySustainRelease() {
+        var envelope = Envelope(attack: 0.01, decay: 0.05, sustain: 0.5, release: 0.1)
+        envelope.open()
+        // A constant 1 in: what comes out is the envelope itself.
+        let held = render(&envelope, [Float](repeating: 1, count: 9_600))
+        #expect(abs(held[239] - 0.5) < 0.01)      // halfway up the 10 ms attack
+        #expect(abs(held[479] - 1) < 0.01)        // at the top after 10 ms
+        #expect(abs(held[479 + 2_400] - 0.505) < 0.002)  // within 1% of sustain 50 ms later
+        #expect(held.last == 0.5)
+        #expect(envelope.stage == .sustain)
+
+        envelope.close()
+        let released = render(&envelope, [Float](repeating: 1, count: 9_600))
+        // 1% of 0.5 after the 100 ms release, then silent and idle.
+        #expect(abs(released[4_799] - 0.005) < 0.001)
+        #expect(released.last == 0)
+        #expect(!envelope.isActive)
+    }
+
+    @Test func envelopeOpenedAgainRisesFromWhereItIs() {
+        var envelope = Envelope(attack: 0.01, decay: 0.01, sustain: 1, release: 1)
+        envelope.open()
+        _ = render(&envelope, [Float](repeating: 1, count: 4_800))
+        envelope.close()
+        let falling = render(&envelope, [Float](repeating: 1, count: 4_800))
+        envelope.open()
+        let again = render(&envelope, [Float](repeating: 1, count: 10))
+        // No jump to 0: on from the released level, up by one step.
+        #expect(again[0] > falling.last!)
+        #expect(again[0] - falling.last! < 0.01)
+    }
+
     @Test func thenRunsOneAfterTheOther() {
         var chain = Oscillator(.square, frequency: 100).then(Gain(level: 0.25))
         let output = render(&chain, silence(4_800))

@@ -65,3 +65,7 @@ fastlane/test_output
 .DS_Store
 .swiftpm/
 Package.resolved
+
+# The demo shaders' Python environment (uv sync in Demo/), and its lock file
+.venv/
+uv.lock

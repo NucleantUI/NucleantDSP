@@ -1,7 +1,7 @@
 # NucleantDSP
 
-Audio processors for Swift: oscillators, filters, waveshapers, a delay and a
-reverb. Each one is an `AudioProcessor` from
+Audio processors for Swift: oscillators, an envelope, filters, waveshapers, a
+delay and a reverb. Each one is an `AudioProcessor` from
 [NucleantAudio](https://github.com/NucleantUI/NucleantAudio)'s
 AudioProtocols. NucleantAudio's `AudioPlayer` plays them on every platform,
 and NucleantDSP never depends on any of NucleantAudio's platform targets.
@@ -9,6 +9,9 @@ and NucleantDSP never depends on any of NucleantAudio's platform targets.
 ```swift
 .package(url: "https://github.com/NucleantUI/NucleantDSP.git", .upToNextMinor(from: "0.0.0"))
 ```
+
+Documentation, with the demo synth running in your browser:
+https://nucleantui.github.io/NucleantDSP/
 
 ## Use
 
@@ -34,6 +37,7 @@ processor is a value: a copy carries on from the same state, on its own.
 | Processor | Written in | What it does |
 |---|---|---|
 | `Oscillator` | Swift | Sine, sawtooth, square and triangle. The sawtooth and square use PolyBLEP. |
+| `Envelope` | Swift | ADSR, applied to the buffer: `open()` starts a note, `close()` lets it go. |
 | `Gain` | Swift, SIMD | A level or decibels, with changes smoothed over 5 ms. |
 | `Biquad` | Swift, SIMD | Bristow-Johnson's cookbook filters: low-, high-, band- and all-pass, notch, peak, and low and high shelves. Four channels per vector. |
 | `Then` | Swift | Two processors, one after the other. |
@@ -55,6 +59,21 @@ processor is a value: a copy carries on from the same state, on its own.
   imports only its plain C header (`include/CNucleantDSP.h`), so neither
   NucleantDSP nor anything using it needs C++ interop.
 
+## Demo
+
+[Demo/](Demo) is a polyphonic synth made of these processors, with a
+NucleantUI window: eight voices, each an oscillator through either filter
+and an envelope, then a drive, the delay and the reverb.
+
+- Its knobs and scope are PyShader shaders (`Demo/Shaders`).
+- `Scripts/compile_demo_shaders.py` compiles them to SPIR-V, which is kept
+  in the repository, so building the demo needs no shader compiler.
+
+```sh
+cd Demo
+swift run Synth
+```
+
 ## Vult
 
 [Vult](https://github.com/vult-dsp/vult) is a language for DSP that
@@ -64,12 +83,8 @@ unchanged.
 - `Scripts/generate_vult.py` compiles them with Vult 0.4.15 into
   `Sources/CNucleantDSP/vult/`, along with Vult's runtime.
 - `Sources/CNucleantDSP/vult_api.cpp` wraps that C++ in a C API.
-
-To regenerate after changing a `.vult` file (needs Node.js):
-
-```sh
-uv run Scripts/generate_vult.py
-```
+- The generated code is kept in the repository, so building NucleantDSP
+  needs no Vult compiler.
 
 The examples are tuned for 44.1 kHz. The filters take their cutoff in
 hertz, and the Swift side works out the Vult control value that puts the

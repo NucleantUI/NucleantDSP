@@ -1,0 +1,14 @@
+# The demo's shaders import PyShader's standard library: `uv sync` here puts
+# it in .venv, where pyshaderc finds it (Scripts/compile_shaders.py).
+[project]
+name = "nucleantdsp-demo-shaders"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = ["pyshader", "pyshader-stdlib"]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+pyshader = { git = "https://github.com/NucleantUI/PyShader" }
+pyshader-stdlib = { git = "https://github.com/NucleantUI/pyshader-stdlib", branch = "master" }

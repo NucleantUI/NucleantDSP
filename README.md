@@ -41,6 +41,7 @@ processor is a value: a copy carries on from the same state, on its own.
 | `Gain` | Swift, SIMD | A level or decibels, with changes smoothed over 5 ms. |
 | `Biquad` | Swift, SIMD | Bristow-Johnson's cookbook filters: low-, high-, band- and all-pass, notch, peak, and low and high shelves. Four channels per vector. |
 | `Then` | Swift | Two processors, one after the other. |
+| `Mixer` | Swift | Several processors side by side, each handed the same buffer, added together at their own levels: oscillators mixed, or effects in parallel. |
 | `StateVariableFilter` | Vult | Low-, high- and band-pass, and notch ([svf.vult](Vult/filters/svf.vult)). |
 | `LadderFilter` | Vult | A four-pole low-pass with resonance ([ladder.vult](Vult/filters/ladder.vult)). |
 | `SoftSaturation` | Vult | 16·tanh(x/16) ([saturate_soft.vult](Vult/effects/saturate_soft.vult)). |
@@ -62,8 +63,9 @@ processor is a value: a copy carries on from the same state, on its own.
 ## Demo
 
 [Demo/](Demo) is a polyphonic synth made of these processors, with a
-NucleantUI window: eight voices, each an oscillator through either filter
-and an envelope, then a drive, the delay and the reverb.
+NucleantUI window: eight voices, each three oscillators in a `Mixer`, tuned
+in semitones and cents, through either filter and an envelope; then a
+drive, the delay and the reverb.
 
 - Its knobs and scope are PyShader shaders (`Demo/Shaders`).
 - `Scripts/compile_demo_shaders.py` compiles them to SPIR-V, which is kept

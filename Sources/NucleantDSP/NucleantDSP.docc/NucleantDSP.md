@@ -4,12 +4,12 @@ Audio processors in Swift, C and Vult: oscillators, an envelope, filters, wavesh
 
 @Metadata {
     @CallToAction(url: "/NucleantDSP/synth/", purpose: link, label: "Play the synth in your browser")
-    @PageImage(purpose: card, source: "synth", alt: "The demo synth: a scope, panels of glowing knobs for the oscillator, filter, envelope, drive, delay and reverb, and a two-octave keyboard.")
+    @PageImage(purpose: card, source: "synth", alt: "The demo synth: a scope, panels of glowing knobs for three oscillators, the filter, envelope, drive, delay and reverb, and a two-octave keyboard.")
 }
 
 ## Overview
 
-@Image(source: "synth", alt: "The demo synth: a scope, panels of glowing knobs for the oscillator, filter, envelope, drive, delay and reverb, and a two-octave keyboard.")
+@Image(source: "synth", alt: "The demo synth: a scope, panels of glowing knobs for three oscillators, the filter, envelope, drive, delay and reverb, and a two-octave keyboard.")
 
 Every processor here is an `AudioProcessor`, the protocol from NucleantAudio's
 AudioProtocols that NucleantAudio's `AudioPlayer` runs on the audio thread of
@@ -33,7 +33,8 @@ try player.start()
 
 The processors are written three ways, and you use them all the same way:
 
-- **Swift**: ``Oscillator``, ``Envelope``, ``Gain``, ``Biquad`` and ``Then``.
+- **Swift**: ``Oscillator``, ``Envelope``, ``Gain``, ``Biquad``, ``Mixer`` and
+  ``Then``.
   ``Gain`` and ``Biquad`` work on four samples or channels at a time as one
   `SIMD4<Float>`.
 - **C**: ``Delay`` and ``Reverb``, a Freeverb.
@@ -79,6 +80,7 @@ your browser.
 ### Level and routing
 
 - ``Gain``
+- ``Mixer``
 - ``Then``
 
 ### Behind the processors

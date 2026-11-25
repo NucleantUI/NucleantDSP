@@ -18,6 +18,9 @@ struct Keyboard {
     var body: some View {
         GeometryReader { proxy in
             let layout = KeyLayout(size: proxy.size)
+            // The keys are placed by offset, which does not size the stack:
+            // it is given the whole keyboard, so a press anywhere on it is
+            // in the stack's own coordinates, the ones `layout` uses.
             ZStack(alignment: .topLeading) {
                 ForEach(KeyLayout.whites, id: \.self) { note in
                     let frame = layout.frame(of: note)
@@ -32,11 +35,12 @@ struct Keyboard {
                         .offset(x: frame.x, y: frame.y)
                 }
             }
+            .frame(width: proxy.size.width, height: proxy.size.height, alignment: .topLeading)
             .contentShape(Rectangle())
             .gesture(
                 DragGesture()
                     .onChanged { drag in
-                        let note = KeyLayout(size: drag.bounds.size).note(at: drag.location)
+                        let note = layout.note(at: drag.location)
                         guard touches[drag.id] != note else { return }
                         if let held = touches[drag.id] { model.release(held) }
                         touches[drag.id] = note

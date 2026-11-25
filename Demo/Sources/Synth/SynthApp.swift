@@ -34,7 +34,20 @@ struct Header {
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.label)
             }
+            .fixedSize()
             Spacer()
+            HStack(spacing: 8) {
+                Text("Octave")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Theme.label)
+                Picker(selection: $model.settings.octave) {
+                    ForEach(-2...2, id: \.self) { octave in
+                        Text(octave > 0 ? "+\(octave)" : "\(octave)").fixedSize().tag(octave)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .fixedSize()
+            }
             Text(model.voices == 1 ? "1 voice" : "\(model.voices) voices")
                 .font(.system(size: 12, design: .monospaced))
                 .foregroundStyle(Theme.label)
@@ -65,7 +78,7 @@ struct SynthView {
             Controls(model: model)
                 .fixedSize(horizontal: false, vertical: true)
             Keyboard(model: model)
-                .frame(height: 150)
+                .frame(height: 130)
         }
         .padding(16)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -104,6 +117,6 @@ struct SynthApp: NucleantApp {
         WindowGroup("Synth") {
             SynthView()
         }
-        .defaultSize(width: 1100, height: 830)
+        .defaultSize(width: 1100, height: 900)
     }
 }

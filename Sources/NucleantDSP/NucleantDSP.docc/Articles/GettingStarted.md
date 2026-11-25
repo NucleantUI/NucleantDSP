@@ -55,6 +55,24 @@ let voice = Oscillator(.sawtooth, frequency: 110, amplitude: 0.3)
 Every processor in the chain stays reachable by its place in it:
 `voice.first.first.second` is the filter above.
 
+## Mix processors
+
+``Mixer`` plays several processors of one kind side by side. Each is handed
+the buffer as it came, and what they leave is added together, each at its
+own level: oscillators are mixed, and filters or effects run in parallel on
+the same sound.
+
+```swift
+let oscillators = Mixer([
+    Oscillator(.sawtooth, frequency: 110),
+    Oscillator(.sawtooth, frequency: 110.64),  // 10 cents up
+    Oscillator(.square, frequency: 55),        // an octave down
+], levels: [0.3, 0.3, 0.2])
+```
+
+A change of level, such as `oscillators.inputs[2].level = 0.4`, is spread
+over the next buffer, so it does not click.
+
 ## Change it while it plays
 
 `withProcessor` hands you the player's processor between two buffers, so a

@@ -2,18 +2,37 @@
 //  Engine.swift
 //  Synth
 //
-//  The sound: eight voices, each an oscillator through a filter and an
-//  envelope, summed, then through a drive, a delay and a reverb. Every part
-//  is one of NucleantDSP's processors; this file only wires them together.
+//  The sound: eight voices, each three oscillators mixed, through a filter
+//  and an envelope; the voices summed, then through a drive, a delay and a
+//  reverb. Every part is one of NucleantDSP's processors; this file only
+//  wires them together.
 //  It runs on the audio thread, inside NucleantAudio's `AudioPlayer`.
 //
 
 import Foundation
 import NucleantDSP
 
+/// One of a voice's oscillators: its waveform, how far it is tuned from the
+/// note, and how loud it is in the voice's mix.
+struct OscillatorSettings: Sendable, Equatable {
+    var waveform: Oscillator.Waveform = .sawtooth
+    /// Semitones up or down from the note, −24…24.
+    var semitones = 0
+    /// Cents up or down from that, −50…50: a fine tune.
+    var cents: Float = 0
+    /// 0…1.
+    var level: Float = 0
+}
+
 /// What the synth sounds like: everything the panels change.
 struct SynthSettings: Sendable, Equatable {
-    var waveform: Oscillator.Waveform = .sawtooth
+    /// Every voice's three oscillators. The second, a few cents off the
+    /// first, beats against it; the third is an octave down.
+    var oscillators = [
+        OscillatorSettings(waveform: .sawtooth, level: 0.8),
+        OscillatorSettings(waveform: .sawtooth, cents: 7, level: 0.6),
+        OscillatorSettings(waveform: .square, semitones: -12, level: 0.3),
+    ]
     /// Octaves up or down from the keyboard's own.
     var octave = 0
 
@@ -90,14 +109,15 @@ enum DriveKind: CaseIterable, Identifiable, Sendable {
     }
 }
 
-/// One note: an oscillator, a filter and an envelope, rendered in mono.
+/// One note: three oscillators mixed, a filter and an envelope, rendered in
+/// mono.
 struct Voice: Sendable {
     /// The MIDI note it plays, or nil while free.
     var note: Int?
     /// When it was started, to steal the oldest when every voice is busy.
     var startedAt = 0
 
-    var oscillator = Oscillator(.sawtooth, frequency: 440, amplitude: 0.25)
+    var oscillators = Mixer([Oscillator](repeating: Oscillator(.sawtooth, frequency: 440, amplitude: 0.2), count: 3))
     var stateVariable = StateVariableFilter(cutoff: 1_000)
     var ladder = LadderFilter(cutoff: 1_000)
     var envelope = Envelope()
@@ -108,8 +128,15 @@ struct Voice: Sendable {
 
     mutating func render(into samples: UnsafeMutableBufferPointer<Float>, settings: SynthSettings, sampleRate: Double) {
         guard let note else { return }
-        oscillator.waveform = settings.waveform
-        oscillator.frequency = Float(440 * pow(2, Double(note + 12 * settings.octave - 69) / 12))
+        // Each oscillator at the note, moved by its own tuning.
+        let pitch = Double(note + 12 * settings.octave - 69)
+        for index in oscillators.inputs.indices where index < settings.oscillators.count {
+            let tuning = settings.oscillators[index]
+            let semitones = pitch + Double(tuning.semitones) + Double(tuning.cents) / 100
+            oscillators.inputs[index].source.waveform = tuning.waveform
+            oscillators.inputs[index].source.frequency = Float(440 * pow(2, semitones / 12))
+            oscillators.inputs[index].level = tuning.level
+        }
         envelope.attack = settings.attack
         envelope.decay = settings.decay
         envelope.sustain = settings.sustain
@@ -124,7 +151,7 @@ struct Voice: Sendable {
             let opening = pow(2, 5 * Double(settings.envelopeAmount) * Double(envelope.level))
             let cutoff = Float(min(Double(settings.cutoff) * opening, 18_000))
 
-            oscillator.process(into: &block, channels: 1, sampleRate: sampleRate)
+            oscillators.process(into: &block, channels: 1, sampleRate: sampleRate)
             if let mode = settings.filter.mode {
                 stateVariable.mode = mode
                 stateVariable.cutoff = cutoff
@@ -146,7 +173,10 @@ struct Voice: Sendable {
 struct SynthEngine: AudioProcessor {
     var settings = SynthSettings()
 
-    private var voices = ContiguousArray(repeating: Voice(), count: 8)
+    /// Each made on its own, not copied from one: copies would share their
+    /// mixers' buffers until the audio thread wrote to them, and copied
+    /// them there.
+    private var voices = ContiguousArray((0..<8).map { _ in Voice() })
     private var started = 0
     /// One voice's samples, before they are added into the buffer.
     private var mono: ContiguousArray<Float> = []

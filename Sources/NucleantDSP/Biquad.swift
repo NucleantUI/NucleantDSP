@@ -93,13 +93,15 @@ public struct Biquad: AudioProcessor {
             return
         }
         designed = (response, frequency, q, sampleRate)
-        let nyquist = Float(sampleRate / 2)
-        let f0 = simd_clamp(frequency, 1, nyquist * 0.999)
-        let w0 = 2 * Float.pi * f0 / Float(sampleRate)
+        // Worked out in Double, which is also where every platform has its
+        // math functions (Android's Foundation has no Float overloads).
+        let nyquist = sampleRate / 2
+        let f0 = simd_clamp(Double(frequency), 1, nyquist * 0.999)
+        let w0 = 2 * Double.pi * f0 / sampleRate
         let cosW0 = cos(w0)
-        let alpha = sin(w0) / (2 * max(q, 0.0001))
+        let alpha = sin(w0) / (2 * max(Double(q), 0.0001))
 
-        var b0: Float, b1: Float, b2: Float, a0: Float, a1: Float, a2: Float
+        var b0: Double, b1: Double, b2: Double, a0: Double, a1: Double, a2: Double
         switch response {
         case .lowPass:
             b0 = (1 - cosW0) / 2; b1 = 1 - cosW0; b2 = b0
@@ -117,11 +119,11 @@ public struct Biquad: AudioProcessor {
             b0 = 1 - alpha; b1 = -2 * cosW0; b2 = 1 + alpha
             a0 = 1 + alpha; a1 = -2 * cosW0; a2 = 1 - alpha
         case .peak(let decibels):
-            let a = pow(10, decibels / 40)
+            let a = pow(10, Double(decibels) / 40)
             b0 = 1 + alpha * a; b1 = -2 * cosW0; b2 = 1 - alpha * a
             a0 = 1 + alpha / a; a1 = -2 * cosW0; a2 = 1 - alpha / a
         case .lowShelf(let decibels):
-            let a = pow(10, decibels / 40)
+            let a = pow(10, Double(decibels) / 40)
             let root = 2 * sqrt(a) * alpha
             b0 = a * ((a + 1) - (a - 1) * cosW0 + root)
             b1 = 2 * a * ((a - 1) - (a + 1) * cosW0)
@@ -130,7 +132,7 @@ public struct Biquad: AudioProcessor {
             a1 = -2 * ((a - 1) + (a + 1) * cosW0)
             a2 = (a + 1) + (a - 1) * cosW0 - root
         case .highShelf(let decibels):
-            let a = pow(10, decibels / 40)
+            let a = pow(10, Double(decibels) / 40)
             let root = 2 * sqrt(a) * alpha
             b0 = a * ((a + 1) + (a - 1) * cosW0 + root)
             b1 = -2 * a * ((a - 1) + (a + 1) * cosW0)
@@ -139,6 +141,7 @@ public struct Biquad: AudioProcessor {
             a1 = 2 * ((a - 1) - (a + 1) * cosW0)
             a2 = (a + 1) - (a - 1) * cosW0 - root
         }
-        coefficients = Coefficients(b0: b0 / a0, b1: b1 / a0, b2: b2 / a0, a1: a1 / a0, a2: a2 / a0)
+        coefficients = Coefficients(
+            b0: Float(b0 / a0), b1: Float(b1 / a0), b2: Float(b2 / a0), a1: Float(a1 / a0), a2: Float(a2 / a0))
     }
 }

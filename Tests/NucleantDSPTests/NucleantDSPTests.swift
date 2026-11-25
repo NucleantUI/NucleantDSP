@@ -35,7 +35,7 @@ private func sine(_ frequency: Double, frames: Int, amplitude: Float = 0.25, sam
 /// The level of `samples` after the first `skip`, while a filter settles.
 private func rms(_ samples: [Float], skip: Int = 4_800) -> Float {
     let tail = samples.dropFirst(skip)
-    return sqrt(tail.reduce(0) { $0 + $1 * $1 } / Float(tail.count))
+    return Float(sqrt(Double(tail.reduce(0) { $0 + $1 * $1 }) / Double(tail.count)))
 }
 
 /// How much of a sine at `frequency` gets through `processor`.
@@ -177,11 +177,11 @@ private func impulse(_ frames: Int, channels: Int = 1) -> [Float] {
     @Test func shapers() {
         var saturation = SoftSaturation()
         let soft = render(&saturation, [0.5, -0.5, 20, 24, 100, -100])
-        #expect(abs(soft[0] - 16 * tanh(0.5 / 16)) < 0.002)
-        #expect(abs(soft[1] + 16 * tanh(0.5 / 16)) < 0.002)
-        #expect(abs(soft[2] - 16 * tanh(20 / 16)) < 0.01)
+        #expect(abs(soft[0] - Float(16 * tanh(0.5 / 16.0))) < 0.002)
+        #expect(abs(soft[1] + Float(16 * tanh(0.5 / 16.0))) < 0.002)
+        #expect(abs(soft[2] - Float(16 * tanh(20 / 16.0))) < 0.01)
         // Past ±24, held there.
-        #expect(abs(soft[3] - 16 * tanh(24 / 16)) < 0.01)
+        #expect(abs(soft[3] - Float(16 * tanh(24 / 16.0))) < 0.01)
         #expect(soft[4] == soft[3])
         #expect(soft[5] == -soft[3])
 

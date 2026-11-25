@@ -19,8 +19,14 @@ public struct Gain: AudioProcessor {
 
     /// The level in decibels: 0 dB is a level of 1, −6 dB about half.
     public var decibels: Float {
-        get { 20 * log10(level) }
-        set { level = pow(10, newValue / 20) }
+        get { Float(20 * log10(Double(level))) }
+        set { level = Gain.level(decibels: newValue) }
+    }
+
+    /// In Double, where every platform has its math functions (Android's
+    /// Foundation has no Float overloads).
+    private static func level(decibels: Float) -> Float {
+        Float(pow(10, Double(decibels) / 20))
     }
 
     /// Where the level is on its way to `level`; nil until the first buffer,
@@ -35,7 +41,7 @@ public struct Gain: AudioProcessor {
     }
 
     public init(decibels: Float) {
-        self.level = pow(10, decibels / 20)
+        self.level = Gain.level(decibels: decibels)
     }
 
     public mutating func process(into buffer: inout MutableSpan<Float>, channels: Int, sampleRate: Double) {

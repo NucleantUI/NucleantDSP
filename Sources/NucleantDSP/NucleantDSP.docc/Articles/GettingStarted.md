@@ -73,6 +73,20 @@ let oscillators = Mixer([
 A change of level, such as `oscillators.inputs[2].level = 0.4`, is spread
 over the next buffer, so it does not click.
 
+## Oversample what adds harmonics
+
+A waveshaper, or a filter that saturates, adds harmonics above what the
+output can hold, and they fold back as tones of their own. ``Oversampled``
+runs a processor at a multiple of the output's rate and filters them away
+on the way back down:
+
+```swift
+let voice = Oscillator(.sawtooth, frequency: 220, amplitude: 0.3)
+    .then(Wavefolder(level: 0.7).oversampled(4))
+```
+
+The processor stays reachable as `processor`: `voice.second.processor.level`.
+
 ## Change it while it plays
 
 `withProcessor` hands you the player's processor between two buffers, so a

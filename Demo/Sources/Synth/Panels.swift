@@ -2,10 +2,10 @@
 //  Panels.swift
 //  Synth
 //
-//  A panel per stage of the sound, in the order the sound goes through
-//  them: the voice's three oscillators (beside the scope, SynthView), its
-//  filter and envelope, then the drive, the delay and the reverb, and the
-//  volume.
+//  A panel per stage of the sound: the voice's three oscillators (beside
+//  the scope, SynthView), and under them, a page at a time in a TabView,
+//  its filter and envelopes, the drive, the EQ and the output, and the
+//  delay and the reverb.
 //
 
 import Foundation
@@ -66,7 +66,7 @@ struct Oscillators {
     var body: some View {
         Panel("Oscillators") {
             HStack(spacing: 4) {
-                ForEach(["Semi", "Fine", "Level"], id: \.self) { name in
+                ForEach(["Semi", "Fine", "Level", "Shape"], id: \.self) { name in
                     Text(name)
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(.secondary)
@@ -83,8 +83,9 @@ struct Oscillators {
     }
 }
 
-/// One oscillator: its waveform, its tuning from the note (semitones, then
-/// cents), and its level in the voice's mix.
+/// One oscillator: its wave, its tuning from the note (semitones, then
+/// cents), its level in the voice's mix, and its shape: the pulse's width,
+/// or the supersaw's detune and mix, dimmed for the waves without one.
 @View
 struct OscillatorRow {
     let model: SynthModel
@@ -98,10 +99,9 @@ struct OscillatorRow {
                 .foregroundStyle(Theme.label)
                 .frame(width: 14)
             Picker(selection: model.binding(\.oscillators[index].waveform)) {
-                Text("Sin").fixedSize().tag(Oscillator.Waveform.sine)
-                Text("Saw").fixedSize().tag(Oscillator.Waveform.sawtooth)
-                Text("Sqr").fixedSize().tag(Oscillator.Waveform.square)
-                Text("Tri").fixedSize().tag(Oscillator.Waveform.triangle)
+                ForEach(Wave.allCases, id: \.self) { wave in
+                    Text(wave.name).fixedSize().tag(wave)
+                }
             }
             .pickerStyle(.segmented)
             .fixedSize()
@@ -112,36 +112,57 @@ struct OscillatorRow {
                      text: settings.cents.centsText, bipolar: true)
                 Knob(title: nil, position: model.knob(\.oscillators[index].level, .linear(0...1)),
                      text: settings.level.percentText)
+                Knob(title: nil, position: model.knob(\.oscillators[index].shape, .linear(0...1)),
+                     text: settings.shapeText, tint: settings.waveform.isShaped ? Theme.accent : Theme.label)
             }
         }
     }
 }
 
-/// The panels after the oscillators, in two rows: the filter, its envelope
-/// and the amp envelope; the drive and the effects. A panel with a picker,
-/// and the output's, is as wide as what it holds; the others share what
-/// the row has left.
+/// The pages of panels under the oscillators, one shown at a time in a
+/// `TabView`: the filter and the envelopes; the drive, the EQ and the
+/// output; the delay and the reverb.
+enum ControlPage: CaseIterable, Hashable, Sendable {
+    case filter, tone, space
+
+    var title: String {
+        switch self {
+        case .filter: "Filter & Envelopes"
+        case .tone: "Drive, EQ & Output"
+        case .space: "Delay & Reverb"
+        }
+    }
+}
+
+/// One page's panels, in a row. A panel with a picker, and the output's,
+/// is as wide as what it holds; the others share what the row has left.
 @View
 struct Controls {
     @Bindable var model: SynthModel
+    let page: ControlPage
 
     var body: some View {
-        VStack(spacing: 12) {
+        switch page {
+        case .filter:
             HStack(spacing: 12) {
                 Panel("Filter") {
+                    // Fourteen of them: a menu.
                     Picker(selection: $model.settings.filter) {
                         ForEach(FilterKind.allCases) { kind in
-                            Text(kind.name).fixedSize().tag(kind)
+                            Text(kind.name).tag(kind)
                         }
                     }
-                    .pickerStyle(.segmented)
-                    .fixedSize()
+                    .frame(width: 150)
                 } content: {
+                    let kind = model.settings.filter
                     HStack(spacing: 4) {
                         Knob(title: "Cutoff", position: model.knob(\.cutoff, .exponential(40...16_000)),
                              text: model.settings.cutoff.hertzText)
-                        Knob(title: "Res", position: model.knob(\.resonance, .linear(0...1)),
-                             text: model.settings.resonance.percentText)
+                        // Each filter reads it its own way: resonance, an
+                        // order, a ripple or a stop band.
+                        Knob(title: kind.resonanceName, position: model.knob(\.resonance, .linear(0...1)),
+                             text: kind.resonanceText(model.settings.resonance),
+                             tint: kind.hasResonance ? Theme.accent : Theme.label)
                         Knob(title: "Env", position: model.knob(\.envelopeAmount, .linear(0...1)),
                              text: model.settings.envelopeAmount.percentText, tint: Theme.filterEnvelope)
                     }
@@ -150,6 +171,7 @@ struct Controls {
                 EnvelopePanel(title: "Filter Envelope", model: model, path: \.filterEnvelope, tint: Theme.filterEnvelope)
                 EnvelopePanel(title: "Amp Envelope", model: model, path: \.amplitude, tint: Theme.envelope)
             }
+        case .tone:
             HStack(spacing: 12) {
                 Panel("Drive") {
                     Picker(selection: $model.settings.drive) {
@@ -164,6 +186,19 @@ struct Controls {
                          text: model.settings.driveAmount.percentText, tint: Theme.drive)
                 }
                 .fixedSize(horizontal: true, vertical: false)
+                EqualizerPanel(model: model)
+                Panel("Output") {
+                    HStack(spacing: 4) {
+                        Knob(title: "Low Cut", position: model.knob(\.lowCut, .exponential(20...500)),
+                             text: model.settings.lowCut.hertzText)
+                        Knob(title: "Volume", position: model.knob(\.volume, .linear(0...1)),
+                             text: model.settings.volume.percentText)
+                    }
+                }
+                .fixedSize(horizontal: true, vertical: false)
+            }
+        case .space:
+            HStack(spacing: 12) {
                 Panel("Delay") {
                     HStack(spacing: 4) {
                         Knob(title: "Time", position: model.knob(\.delayTime, .exponential(0.02...1.2)),
@@ -184,11 +219,28 @@ struct Controls {
                              text: model.settings.reverbMix.percentText, tint: Theme.space)
                     }
                 }
-                Panel("Output") {
-                    Knob(title: "Volume", position: model.knob(\.volume, .linear(0...1)),
-                         text: model.settings.volume.percentText)
-                }
-                .fixedSize(horizontal: true, vertical: false)
+            }
+        }
+    }
+}
+
+/// The three bands and the tilt, after the drive.
+@View
+struct EqualizerPanel {
+    let model: SynthModel
+
+    var body: some View {
+        let settings = model.settings
+        Panel("EQ") {
+            HStack(spacing: 4) {
+                Knob(title: "Low", position: model.knob(\.eqLow, .linear(-12...12)),
+                     text: settings.eqLow.decibelText, bipolar: true, tint: Theme.drive)
+                Knob(title: "Mid", position: model.knob(\.eqMid, .linear(-12...12)),
+                     text: settings.eqMid.decibelText, bipolar: true, tint: Theme.drive)
+                Knob(title: "High", position: model.knob(\.eqHigh, .linear(-12...12)),
+                     text: settings.eqHigh.decibelText, bipolar: true, tint: Theme.drive)
+                Knob(title: "Tilt", position: model.knob(\.tilt, .linear(-6...6)),
+                     text: settings.tilt.decibelText, bipolar: true, tint: Theme.drive)
             }
         }
     }
@@ -250,6 +302,18 @@ extension SynthModel {
 
 // How the knobs show their values.
 
+extension OscillatorSettings {
+    /// The Shape knob's value as the wave reads it: the pulse's width, the
+    /// supersaw's detune; nothing for the others.
+    var shapeText: String {
+        switch waveform {
+        case .pulse: String(format: "%.0f%%", (0.5 - 0.45 * shape) * 100)
+        case .supersaw: String(format: "%.0f%%", shape * 100)
+        default: "–"
+        }
+    }
+}
+
 extension Float {
     var hertzText: String {
         self >= 1_000 ? String(format: "%.1f kHz", self / 1_000) : String(format: "%.0f Hz", self)
@@ -261,6 +325,10 @@ extension Float {
 
     var centsText: String {
         abs(self) < 0.5 ? "0 ct" : String(format: "%+.0f ct", self)
+    }
+
+    var decibelText: String {
+        abs(self) < 0.05 ? "0 dB" : String(format: "%+.1f dB", self)
     }
 }
 

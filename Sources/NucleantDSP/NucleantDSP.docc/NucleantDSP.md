@@ -1,6 +1,6 @@
 # ``NucleantDSP``
 
-Audio processors in Swift, C and Vult: oscillators, an envelope, filters, waveshapers, a delay and a reverb, played on every platform through NucleantAudio.
+Audio processors in Swift, C and Vult: oscillators, an envelope, filters and equalizers, waveshapers, oversampling, a delay and a reverb, played on every platform through NucleantAudio.
 
 @Metadata {
     @CallToAction(url: "/NucleantDSP/synth/", purpose: link, label: "Play the synth in your browser")
@@ -33,10 +33,14 @@ try player.start()
 
 The processors are written three ways, and you use them all the same way:
 
-- **Swift**: ``Oscillator``, ``Envelope``, ``Gain``, ``Biquad``, ``Mixer`` and
-  ``Then``.
-  ``Gain`` and ``Biquad`` work on four samples or channels at a time as one
-  `SIMD4<Float>`.
+- **Swift**: ``Oscillator``, ``PulseOscillator``, ``Supersaw``, ``Envelope``,
+  ``Gain``, ``Biquad``, the designed filters (``Butterworth``,
+  ``ChebyshevI``, ``ChebyshevII``, ``Elliptic``, ``Bessel``, ``Legendre``),
+  ``MoogLadder``, ``ThreePoleLowPass``, ``FormantFilter``, ``LinkwitzRiley``,
+  ``DCBlocker``, ``ThreeBandEqualizer``, ``TiltEqualizer``, ``Oversampled``,
+  ``Mixer`` and ``Then``. ``Gain``, ``Biquad`` and the designed filters work
+  on four samples or channels at a time as one vector. See
+  <doc:FilterDesigns> for the filters and where each comes from.
 - **C**: ``Delay`` and ``Reverb``, a Freeverb.
 - **Vult**: ``StateVariableFilter``, ``LadderFilter``, ``SoftSaturation``,
   ``CubicClipper``, ``Wavefolder`` and ``Bitcrusher``. They are Vult's own
@@ -57,13 +61,32 @@ your browser.
 ### Making sound
 
 - ``Oscillator``
+- ``PulseOscillator``
+- ``Supersaw``
 - ``Envelope``
 
 ### Filters
 
+- <doc:FilterDesigns>
 - ``Biquad``
+- ``Butterworth``
+- ``ChebyshevI``
+- ``ChebyshevII``
+- ``Elliptic``
+- ``Bessel``
+- ``Legendre``
+- ``MoogLadder``
+- ``ThreePoleLowPass``
+- ``FormantFilter``
+- ``LinkwitzRiley``
+- ``DCBlocker``
 - ``StateVariableFilter``
 - ``LadderFilter``
+
+### Equalizers
+
+- ``ThreeBandEqualizer``
+- ``TiltEqualizer``
 
 ### Shaping
 
@@ -71,6 +94,7 @@ your browser.
 - ``CubicClipper``
 - ``Wavefolder``
 - ``Bitcrusher``
+- ``Oversampled``
 
 ### Time and space
 

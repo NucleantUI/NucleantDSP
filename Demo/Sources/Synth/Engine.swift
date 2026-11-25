@@ -3,25 +3,48 @@
 //  Synth
 //
 //  The sound: eight voices, each three oscillators mixed, through a filter
-//  and an envelope; the voices summed, then through a drive, a delay and a
-//  reverb. Every part is one of NucleantDSP's processors; this file only
-//  wires them together.
+//  and an envelope; the voices summed, then through a drive, an EQ, a delay
+//  and a reverb, and a low cut. Every part is one of NucleantDSP's
+//  processors; this file only wires them together.
 //  It runs on the audio thread, inside NucleantAudio's `AudioPlayer`.
 //
 
 import Foundation
 import NucleantDSP
 
-/// One of a voice's oscillators: its waveform, how far it is tuned from the
-/// note, and how loud it is in the voice's mix.
+/// What one of a voice's oscillators plays: NucleantDSP's `Oscillator`
+/// waveforms, a `PulseOscillator` or a `Supersaw`.
+enum Wave: CaseIterable, Sendable {
+    case sine, sawtooth, square, triangle, pulse, supersaw
+
+    var name: String {
+        switch self {
+        case .sine: "Sin"
+        case .sawtooth: "Saw"
+        case .square: "Sqr"
+        case .triangle: "Tri"
+        case .pulse: "Pls"
+        case .supersaw: "Sup"
+        }
+    }
+
+    /// Whether the oscillator's Shape knob does anything for it.
+    var isShaped: Bool { self == .pulse || self == .supersaw }
+}
+
+/// One of a voice's oscillators: its wave, how far it is tuned from the
+/// note, how loud it is in the voice's mix, and its shape.
 struct OscillatorSettings: Sendable, Equatable {
-    var waveform: Oscillator.Waveform = .sawtooth
+    var waveform: Wave = .sawtooth
     /// Semitones up or down from the note, −24…24.
     var semitones = 0
     /// Cents up or down from that, −50…50: a fine tune.
     var cents: Float = 0
     /// 0…1.
     var level: Float = 0
+    /// 0…1. The pulse: from a square at 0 to a 5% pulse at 1. The
+    /// supersaw: its detune, and with it its mix.
+    var shape: Float = 0.5
 }
 
 /// An envelope's four stages: times in seconds, the sustain 0…1.
@@ -47,7 +70,7 @@ struct SynthSettings: Sendable, Equatable {
     var filter: FilterKind = .ladder
     /// In hertz, before the envelope opens it further.
     var cutoff: Float = 900
-    /// 0…1, mapped onto each filter's own range.
+    /// 0…1, mapped onto each filter's own range, or its order or ripple.
     var resonance: Float = 0.35
     /// 0…1: how far the filter envelope opens the filter, up to five
     /// octaves.
@@ -62,6 +85,13 @@ struct SynthSettings: Sendable, Equatable {
     /// 0…1.
     var driveAmount: Float = 0.3
 
+    /// The three bands, in decibels, −12…12.
+    var eqLow: Float = 0
+    var eqMid: Float = 0
+    var eqHigh: Float = 0
+    /// The tilt, in decibels, −6…6.
+    var tilt: Float = 0
+
     var delayTime = 0.3
     var delayFeedback: Float = 0.35
     var delayMix: Float = 0.2
@@ -70,23 +100,35 @@ struct SynthSettings: Sendable, Equatable {
     var reverbDamping: Float = 0.5
     var reverbMix: Float = 0.25
 
+    /// In hertz: everything below is cut, at the very end.
+    var lowCut: Float = 20
     var volume: Float = 0.7
 }
 
-/// The filter every voice goes through: one of the state variable filter's
-/// outputs, or the ladder.
+/// The filter every voice goes through.
 enum FilterKind: CaseIterable, Identifiable, Sendable {
     case lowPass, highPass, bandPass, notch, ladder
+    case moog, threePole, formant
+    case butterworth, chebyshevI, chebyshevII, elliptic, bessel, legendre
 
     var id: Self { self }
 
     var name: String {
         switch self {
-        case .lowPass: "LP"
-        case .highPass: "HP"
-        case .bandPass: "BP"
-        case .notch: "Notch"
-        case .ladder: "Ladder"
+        case .lowPass: "SVF Low-pass"
+        case .highPass: "SVF High-pass"
+        case .bandPass: "SVF Band-pass"
+        case .notch: "SVF Notch"
+        case .ladder: "Vult Ladder"
+        case .moog: "Moog Ladder"
+        case .threePole: "3-Pole 18 dB"
+        case .formant: "Formant"
+        case .butterworth: "Butterworth"
+        case .chebyshevI: "Chebyshev I"
+        case .chebyshevII: "Chebyshev II"
+        case .elliptic: "Elliptic"
+        case .bessel: "Bessel"
+        case .legendre: "Legendre"
         }
     }
 
@@ -96,7 +138,39 @@ enum FilterKind: CaseIterable, Identifiable, Sendable {
         case .highPass: .highPass
         case .bandPass: .bandPass
         case .notch: .notch
-        case .ladder: nil
+        default: nil
+        }
+    }
+
+    /// What the Res knob sets for this filter.
+    var resonanceName: String {
+        switch self {
+        case .butterworth, .bessel, .legendre: "Order"
+        case .chebyshevI, .elliptic: "Ripple"
+        case .chebyshevII: "Stop"
+        default: "Res"
+        }
+    }
+
+    /// Whether the Res knob does anything for it: the formant filter has
+    /// nothing to set.
+    var hasResonance: Bool { self != .formant }
+
+    /// The designed filters' order from the Res knob: 2 to 8 poles.
+    static func order(_ resonance: Float) -> Int { 2 + Int((resonance * 6).rounded()) }
+    /// Chebyshev I's and the elliptic's ripple: 0.1 to 6 dB.
+    static func ripple(_ resonance: Float) -> Float { 0.1 + resonance * 5.9 }
+    /// Chebyshev II's stop band: 60 dB down to 15 dB down.
+    static func stopBand(_ resonance: Float) -> Float { 60 - resonance * 45 }
+
+    /// The Res knob's value, as this filter reads it.
+    func resonanceText(_ resonance: Float) -> String {
+        switch self {
+        case .butterworth, .bessel, .legendre: "\(FilterKind.order(resonance)) poles"
+        case .chebyshevI, .elliptic: String(format: "%.1f dB", FilterKind.ripple(resonance))
+        case .chebyshevII: String(format: "-%.0f dB", FilterKind.stopBand(resonance))
+        case .formant: "–"
+        default: String(format: "%.0f%%", resonance * 100)
         }
     }
 }
@@ -118,6 +192,41 @@ enum DriveKind: CaseIterable, Identifiable, Sendable {
     }
 }
 
+/// One oscillator of a voice: whichever of NucleantDSP's generators its
+/// wave calls for, so three of them can share a `Mixer`.
+struct VoiceOscillator: AudioProcessor {
+    var wave: Wave = .sawtooth
+    var frequency: Float = 440
+    var shape: Float = 0.5
+
+    private var basic = Oscillator(.sawtooth, frequency: 440, amplitude: 0.2)
+    private var pulse = PulseOscillator(frequency: 440, amplitude: 0.2)
+    private var supersaw = Supersaw(frequency: 440, amplitude: 0.2)
+
+    mutating func process(into buffer: inout MutableSpan<Float>, channels: Int, sampleRate: Double) {
+        switch wave {
+        case .sine, .sawtooth, .square, .triangle:
+            basic.waveform = switch wave {
+            case .sine: .sine
+            case .square: .square
+            case .triangle: .triangle
+            default: .sawtooth
+            }
+            basic.frequency = frequency
+            basic.process(into: &buffer, channels: channels, sampleRate: sampleRate)
+        case .pulse:
+            pulse.frequency = frequency
+            pulse.width = 0.5 - 0.45 * shape
+            pulse.process(into: &buffer, channels: channels, sampleRate: sampleRate)
+        case .supersaw:
+            supersaw.frequency = frequency
+            supersaw.detune = shape
+            supersaw.mix = 0.4 + 0.6 * shape
+            supersaw.process(into: &buffer, channels: channels, sampleRate: sampleRate)
+        }
+    }
+}
+
 /// One note: three oscillators mixed, a filter its own envelope opens, and an
 /// envelope for its level, rendered in mono.
 struct Voice: Sendable {
@@ -126,9 +235,19 @@ struct Voice: Sendable {
     /// When it was started, to steal the oldest when every voice is busy.
     var startedAt = 0
 
-    var oscillators = Mixer([Oscillator](repeating: Oscillator(.sawtooth, frequency: 440, amplitude: 0.2), count: 3))
+    /// Each made on its own, so none shares another's buffers.
+    var oscillators = Mixer((0..<3).map { _ in VoiceOscillator() })
     var stateVariable = StateVariableFilter(cutoff: 1_000)
     var ladder = LadderFilter(cutoff: 1_000)
+    var moog = MoogLadder(cutoff: 1_000, drive: 1.5)
+    var threePole = ThreePoleLowPass(cutoff: 1_000, distortion: 0.3)
+    var formant = FormantFilter(.a)
+    var butterworth = Butterworth(.lowPass, frequency: 1_000)
+    var chebyshevI = ChebyshevI(.lowPass, frequency: 1_000)
+    var chebyshevII = ChebyshevII(.lowPass, order: 6, frequency: 1_000)
+    var elliptic = Elliptic(.lowPass, frequency: 1_000)
+    var bessel = Bessel(.lowPass, frequency: 1_000)
+    var legendre = Legendre(.lowPass, frequency: 1_000)
     /// Its level over the note: applied to the sound.
     var amplitude = Envelope()
     /// How far the filter is open over the note: run over a block of ones,
@@ -162,8 +281,9 @@ struct Voice: Sendable {
         for index in oscillators.inputs.indices where index < settings.oscillators.count {
             let tuning = settings.oscillators[index]
             let semitones = pitch + Double(tuning.semitones) + Double(tuning.cents) / 100
-            oscillators.inputs[index].source.waveform = tuning.waveform
+            oscillators.inputs[index].source.wave = tuning.waveform
             oscillators.inputs[index].source.frequency = Float(440 * pow(2, semitones / 12))
+            oscillators.inputs[index].source.shape = tuning.shape
             oscillators.inputs[index].level = tuning.level
         }
         Voice.set(&amplitude, to: settings.amplitude)
@@ -185,20 +305,65 @@ struct Voice: Sendable {
             let cutoff = Float(min(Double(settings.cutoff) * opening, 18_000))
 
             oscillators.process(into: &block, channels: 1, sampleRate: sampleRate)
-            if let mode = settings.filter.mode {
-                stateVariable.mode = mode
-                stateVariable.cutoff = cutoff
-                stateVariable.resonance = settings.resonance * 4
-                stateVariable.process(into: &block, channels: 1, sampleRate: sampleRate)
-            } else {
-                ladder.cutoff = cutoff
-                ladder.resonance = settings.resonance * 0.95
-                ladder.process(into: &block, channels: 1, sampleRate: sampleRate)
-            }
+            filter(&block, cutoff: cutoff, settings: settings, sampleRate: sampleRate)
             amplitude.process(into: &block, channels: 1, sampleRate: sampleRate)
             start = end
         }
         if !amplitude.isActive { self.note = nil }
+    }
+
+    /// The block through the chosen filter, at `cutoff`.
+    private mutating func filter(_ block: inout MutableSpan<Float>, cutoff: Float, settings: SynthSettings, sampleRate: Double) {
+        let resonance = settings.resonance
+        switch settings.filter {
+        case .lowPass, .highPass, .bandPass, .notch:
+            stateVariable.mode = settings.filter.mode ?? .lowPass
+            stateVariable.cutoff = cutoff
+            stateVariable.resonance = resonance * 4
+            stateVariable.process(into: &block, channels: 1, sampleRate: sampleRate)
+        case .ladder:
+            ladder.cutoff = cutoff
+            ladder.resonance = resonance * 0.95
+            ladder.process(into: &block, channels: 1, sampleRate: sampleRate)
+        case .moog:
+            moog.cutoff = cutoff
+            moog.resonance = resonance
+            moog.process(into: &block, channels: 1, sampleRate: sampleRate)
+        case .threePole:
+            threePole.cutoff = cutoff
+            threePole.resonance = resonance * 0.9
+            threePole.process(into: &block, channels: 1, sampleRate: sampleRate)
+        case .formant:
+            // The cutoff's place on its knob, 40 Hz to 16 kHz, moves the
+            // vowel from A to U: the envelope sweeps through them.
+            let position = log(Double(max(cutoff, 40)) / 40) / log(16_000.0 / 40)
+            formant.vowel = Float(min(max(position, 0), 1) * 4)
+            formant.process(into: &block, channels: 1, sampleRate: sampleRate)
+        case .butterworth:
+            butterworth.frequency = cutoff
+            butterworth.order = FilterKind.order(resonance)
+            butterworth.process(into: &block, channels: 1, sampleRate: sampleRate)
+        case .chebyshevI:
+            chebyshevI.frequency = cutoff
+            chebyshevI.ripple = FilterKind.ripple(resonance)
+            chebyshevI.process(into: &block, channels: 1, sampleRate: sampleRate)
+        case .chebyshevII:
+            chebyshevII.frequency = cutoff
+            chebyshevII.stopBand = FilterKind.stopBand(resonance)
+            chebyshevII.process(into: &block, channels: 1, sampleRate: sampleRate)
+        case .elliptic:
+            elliptic.frequency = cutoff
+            elliptic.ripple = FilterKind.ripple(resonance)
+            elliptic.process(into: &block, channels: 1, sampleRate: sampleRate)
+        case .bessel:
+            bessel.frequency = cutoff
+            bessel.order = FilterKind.order(resonance)
+            bessel.process(into: &block, channels: 1, sampleRate: sampleRate)
+        case .legendre:
+            legendre.frequency = cutoff
+            legendre.order = FilterKind.order(resonance)
+            legendre.process(into: &block, channels: 1, sampleRate: sampleRate)
+        }
     }
 
     private static func set(_ envelope: inout Envelope, to settings: EnvelopeSettings) {
@@ -221,12 +386,19 @@ struct SynthEngine: AudioProcessor {
     /// One voice's samples, before they are added into the buffer.
     private var mono: ContiguousArray<Float> = []
 
-    private var saturation = SoftSaturation()
-    private var clipper = CubicClipper()
-    private var folder = Wavefolder(level: 0)
-    private var crusher = Bitcrusher(amount: 0)
+    /// The shapers at four times the rate, so the harmonics they add above
+    /// what is heard are filtered out instead of folding back.
+    private var saturation = SoftSaturation().oversampled(4)
+    private var clipper = CubicClipper().oversampled(4)
+    private var folder = Wavefolder(level: 0).oversampled(4)
+    private var crusher = Bitcrusher(amount: 0).oversampled(4)
+    /// What a shaper leaves off-centre, taken away.
+    private var dcBlocker = DCBlocker()
+    private var equalizer = ThreeBandEqualizer()
+    private var tilt = TiltEqualizer(frequency: 800)
     private var delay = Delay(time: 0.3, maximumTime: 1.5)
     private var reverb = Reverb()
+    private var lowCut = LinkwitzRiley(.highPass, frequency: 20)
     private var output = Gain()
 
     /// The latest frames of the first channel, oldest first, for the scope:
@@ -287,18 +459,26 @@ struct SynthEngine: AudioProcessor {
         case .off:
             break
         case .saturation:
-            saturation.drive = 1 + amount * 15
+            saturation.processor.drive = 1 + amount * 15
             saturation.process(into: &buffer, channels: channels, sampleRate: sampleRate)
         case .clipper:
-            clipper.drive = 1 + amount * 7
+            clipper.processor.drive = 1 + amount * 7
             clipper.process(into: &buffer, channels: channels, sampleRate: sampleRate)
         case .folder:
-            folder.level = amount
+            folder.processor.level = amount
             folder.process(into: &buffer, channels: channels, sampleRate: sampleRate)
         case .crusher:
-            crusher.amount = amount
+            crusher.processor.amount = amount
             crusher.process(into: &buffer, channels: channels, sampleRate: sampleRate)
         }
+        dcBlocker.process(into: &buffer, channels: channels, sampleRate: sampleRate)
+
+        equalizer.low = settings.eqLow
+        equalizer.mid = settings.eqMid
+        equalizer.high = settings.eqHigh
+        equalizer.process(into: &buffer, channels: channels, sampleRate: sampleRate)
+        tilt.decibels = settings.tilt
+        tilt.process(into: &buffer, channels: channels, sampleRate: sampleRate)
 
         delay.time = settings.delayTime
         delay.feedback = settings.delayFeedback
@@ -310,6 +490,8 @@ struct SynthEngine: AudioProcessor {
         reverb.mix = settings.reverbMix
         reverb.process(into: &buffer, channels: channels, sampleRate: sampleRate)
 
+        lowCut.frequency = settings.lowCut
+        lowCut.process(into: &buffer, channels: channels, sampleRate: sampleRate)
         output.level = settings.volume
         output.process(into: &buffer, channels: channels, sampleRate: sampleRate)
 

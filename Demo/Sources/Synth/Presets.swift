@@ -161,8 +161,8 @@ enum Preset: CaseIterable, Identifiable, Sendable {
             // Two supersaws an octave apart, through the Moog ladder.
             s.filterEnvelope = EnvelopeSettings(attack: 0.01, decay: 0.6, sustain: 0.6, release: 0.5)
             s.oscillators = [
-                OscillatorSettings(waveform: .supersaw, level: 0.8, shape: 0.6),
-                OscillatorSettings(waveform: .supersaw, semitones: 12, level: 0.35, shape: 0.45),
+                OscillatorSettings(waveform: .supersaw, level: 0.8, shape: 0.8),
+                OscillatorSettings(waveform: .supersaw, semitones: 12, level: 0.35, shape: 0.7),
                 OscillatorSettings(waveform: .sine, semitones: -12, level: 0.3),
             ]
             s.filter = .moog

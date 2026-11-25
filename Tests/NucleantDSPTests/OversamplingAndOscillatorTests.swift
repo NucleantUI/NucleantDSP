@@ -147,8 +147,8 @@ private func decibels(_ ratio: Double) -> Double { 20 * log10(ratio) }
     }
 
     @Test func supersawInUnisonIsOneSawtooth() {
-        // No detune: all seven are the same sawtooth, high-passed at its
-        // pitch.
+        // No detune: all seven within a cent of each other, one sawtooth,
+        // high-passed at its pitch.
         var saw = Supersaw(frequency: 200, detune: 0, mix: 1, amplitude: 0.5)
         let output = Array(render(&saw, silence(48_000)).dropFirst(4_800))
         let fundamental = amplitude(of: output, at: 200)
@@ -171,6 +171,19 @@ private func decibels(_ ratio: Double) -> Double { 20 * log10(ratio) }
         #expect(amplitude(of: unison, at: above) < amplitude(of: unison, at: 200) / 100)
         #expect(amplitude(of: detuned, at: above) > amplitude(of: detuned, at: 200) / 3)
         #expect(amplitude(of: detuned, at: below) > amplitude(of: detuned, at: 200) / 3)
+    }
+
+    /// The detune follows the JP-8000's knob: half way is its step 63.5,
+    /// a base of 32.5/16384, the outer one 1.1% up; a straight line from
+    /// no detune to full would have put it 5.5% up.
+    @Test func supersawDetuneFollowsTheKnobsCurve() {
+        var saw = Supersaw(frequency: 1_000, detune: 0.5, mix: 1)
+        let output = Array(render(&saw, silence(48_000)).dropFirst(4_800))
+        let curved = 1_000 * (1 + 704 * 32.5 / 16_384 / 128)
+        let straight = 1_000 * (1 + 704 * 0.5 * 321 / 16_384 / 128)
+        let middle = amplitude(of: output, at: 1_000)
+        #expect(amplitude(of: output, at: curved) > middle / 3)
+        #expect(amplitude(of: output, at: straight) < middle / 30)
     }
 
     @Test func supersawMixLeavesTheSidesAFaintPresenceAtZero() {

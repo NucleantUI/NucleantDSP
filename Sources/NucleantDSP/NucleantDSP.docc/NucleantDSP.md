@@ -4,12 +4,12 @@ Audio processors in Swift, C and Vult: oscillators, an envelope, filters, wavesh
 
 @Metadata {
     @CallToAction(url: "/NucleantDSP/synth/", purpose: link, label: "Play the synth in your browser")
-    @PageImage(purpose: card, source: "synth", alt: "The demo synth: a scope, panels of glowing knobs for three oscillators, the filter, envelope, drive, delay and reverb, and a two-octave keyboard.")
+    @PageImage(purpose: card, source: "synth", alt: "The demo synth: three oscillators beside a scope, then glowing knobs for the filter, its envelope, the amp envelope, drive, delay and reverb, and a two-octave keyboard.")
 }
 
 ## Overview
 
-@Image(source: "synth", alt: "The demo synth: a scope, panels of glowing knobs for three oscillators, the filter, envelope, drive, delay and reverb, and a two-octave keyboard.")
+@Image(source: "synth", alt: "The demo synth: three oscillators beside a scope, then glowing knobs for the filter, its envelope, the amp envelope, drive, delay and reverb, and a two-octave keyboard.")
 
 Every processor here is an `AudioProcessor`, the protocol from NucleantAudio's
 AudioProtocols that NucleantAudio's `AudioPlayer` runs on the audio thread of

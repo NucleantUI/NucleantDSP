@@ -17,6 +17,7 @@ struct Theme {
     static let label = Color(hex: 0x8B93A3)
     static let accent = Color(hex: 0x29C5FF)
     static let envelope = Color(hex: 0x7CF29A)
+    static let filterEnvelope = Color(hex: 0xF2D46B)
     static let drive = Color(hex: 0xFF8A3D)
     static let space = Color(hex: 0xC18BFF)
 }
@@ -30,9 +31,17 @@ struct Header {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Synth")
                     .font(.system(size: 24, weight: .bold))
-                Text(model.problem ?? "NucleantDSP · keys A to ', octave Z and X")
-                    .font(.system(size: 12))
-                    .foregroundStyle(Theme.label)
+                HStack(spacing: 12) {
+                    Text(model.problem ?? "NucleantDSP · keys A to ', octave Z and X")
+                        .font(.system(size: 12))
+                        .foregroundStyle(Theme.label)
+                    // Last on its line, in a box as wide as its longest
+                    // ("8 voices"): a change of count moves nothing.
+                    Text(model.voices == 1 ? "1 voice" : "\(model.voices) voices")
+                        .font(.system(size: 12, design: .monospaced))
+                        .foregroundStyle(Theme.label)
+                        .frame(width: 84, alignment: .leading)
+                }
             }
             .fixedSize()
             Spacer()
@@ -40,6 +49,7 @@ struct Header {
                 Text("Octave")
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.label)
+                    .fixedSize()
                 Picker(selection: $model.settings.octave) {
                     ForEach(-2...2, id: \.self) { octave in
                         Text(octave > 0 ? "+\(octave)" : "\(octave)").fixedSize().tag(octave)
@@ -48,9 +58,6 @@ struct Header {
                 .pickerStyle(.segmented)
                 .fixedSize()
             }
-            Text(model.voices == 1 ? "1 voice" : "\(model.voices) voices")
-                .font(.system(size: 12, design: .monospaced))
-                .foregroundStyle(Theme.label)
             Picker(selection: $model.preset) {
                 ForEach(Preset.allCases) { preset in
                     Text(preset.name).tag(preset)
@@ -72,13 +79,21 @@ struct SynthView {
     var body: some View {
         VStack(spacing: 12) {
             Header(model: model)
-            // The scope takes what the panels and the keys leave.
-            Scope(samples: model.scope)
-                .frame(minHeight: 60, maxHeight: .infinity)
+            // The oscillators at their own width, the scope beside them as
+            // tall as they are.
+            HStack(alignment: .top, spacing: 12) {
+                Oscillators(model: model)
+                    .fixedSize(horizontal: true, vertical: false)
+                Scope(samples: model.scope)
+                    .frame(minHeight: 100, maxHeight: .infinity)
+                    .cornerRadius(12)
+            }
+            .fixedSize(horizontal: false, vertical: true)
             Controls(model: model)
                 .fixedSize(horizontal: false, vertical: true)
+            // The keys take what the panels leave, within reason.
             Keyboard(model: model)
-                .frame(height: 130)
+                .frame(minHeight: 110, maxHeight: 200)
         }
         .padding(16)
         .frame(maxWidth: .infinity, maxHeight: .infinity)

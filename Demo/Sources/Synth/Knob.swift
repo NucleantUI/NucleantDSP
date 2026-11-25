@@ -35,10 +35,11 @@ enum KnobScale {
 }
 
 /// A knob drawn by Shaders/Knob.py: a black cap inside a ring of light up to
-/// its value. Dragged up or down to turn it; its name and value under it.
+/// its value. Dragged up or down to turn it; its name and value under it —
+/// or only its value, where a column of knobs is named once above them.
 @View
 struct Knob {
-    let title: String
+    let title: String?
     /// 0…1, along the knob's travel.
     @Binding var position: Double
     let text: String
@@ -49,7 +50,7 @@ struct Knob {
     /// Where the drag began, so the knob turns by how far it has moved.
     @State private var dragStart: Double?
 
-    init(title: String, position: Binding<Double>, text: String, bipolar: Bool = false,
+    init(title: String?, position: Binding<Double>, text: String, bipolar: Bool = false,
          tint: Color = Theme.accent, _viewID: ViewID = #viewID) {
         self.title = title
         self._position = position
@@ -61,6 +62,10 @@ struct Knob {
 
     /// Points of drag for the whole travel.
     static let travel = 160.0
+
+    /// As wide as its widest name or value, so a value's change of length
+    /// moves nothing beside it.
+    static let width = 72.0
 
     var body: some View {
         VStack(spacing: 2) {
@@ -81,12 +86,14 @@ struct Knob {
                     }
                     .onEnded { _ in dragStart = nil }
             )
-            Text(title)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(.secondary)
+            if let title {
+                Text(title)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+            }
             Text(text)
                 .font(.system(size: 11, design: .monospaced))
         }
-        .frame(width: 78)
+        .frame(width: Knob.width)
     }
 }

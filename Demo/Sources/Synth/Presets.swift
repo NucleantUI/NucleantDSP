@@ -29,7 +29,11 @@ enum Preset: CaseIterable, Identifiable, Sendable {
         case .classic:
             break
         case .bass:
-            s.waveform = .square
+            s.oscillators = [
+                OscillatorSettings(waveform: .square, level: 0.8),
+                OscillatorSettings(waveform: .sawtooth, cents: -6, level: 0.5),
+                OscillatorSettings(waveform: .sine, semitones: -12, level: 0.6),
+            ]
             s.octave = -1
             s.filter = .ladder
             s.cutoff = 260
@@ -44,7 +48,11 @@ enum Preset: CaseIterable, Identifiable, Sendable {
             s.delayMix = 0
             s.reverbMix = 0.08
         case .lead:
-            s.waveform = .sawtooth
+            s.oscillators = [
+                OscillatorSettings(waveform: .sawtooth, level: 0.8),
+                OscillatorSettings(waveform: .sawtooth, cents: 9, level: 0.7),
+                OscillatorSettings(waveform: .square, semitones: 12, level: 0.25),
+            ]
             s.filter = .lowPass
             s.cutoff = 1_800
             s.resonance = 0.45
@@ -60,7 +68,11 @@ enum Preset: CaseIterable, Identifiable, Sendable {
             s.delayMix = 0.3
             s.reverbMix = 0.2
         case .pad:
-            s.waveform = .triangle
+            s.oscillators = [
+                OscillatorSettings(waveform: .triangle, level: 0.7),
+                OscillatorSettings(waveform: .sawtooth, cents: -12, level: 0.35),
+                OscillatorSettings(waveform: .sawtooth, cents: 12, level: 0.35),
+            ]
             s.filter = .ladder
             s.cutoff = 700
             s.resonance = 0.2
@@ -75,7 +87,11 @@ enum Preset: CaseIterable, Identifiable, Sendable {
             s.reverbDamping = 0.3
             s.reverbMix = 0.5
         case .pluck:
-            s.waveform = .sawtooth
+            s.oscillators = [
+                OscillatorSettings(waveform: .sawtooth, level: 0.8),
+                OscillatorSettings(waveform: .square, cents: 5, level: 0.4),
+                OscillatorSettings(waveform: .sine, semitones: -12, level: 0),
+            ]
             s.filter = .lowPass
             s.cutoff = 300
             s.resonance = 0.3
@@ -91,7 +107,13 @@ enum Preset: CaseIterable, Identifiable, Sendable {
             s.delayMix = 0.25
             s.reverbMix = 0.25
         case .bells:
-            s.waveform = .sine
+            // The second at 2.76 times the first's frequency (17.59
+            // semitones up), as a bell's partials are.
+            s.oscillators = [
+                OscillatorSettings(waveform: .sine, level: 0.8),
+                OscillatorSettings(waveform: .sine, semitones: 18, cents: -41, level: 0.35),
+                OscillatorSettings(waveform: .triangle, semitones: 24, level: 0.15),
+            ]
             s.octave = 1
             s.filter = .bandPass
             s.cutoff = 2_400
@@ -109,7 +131,11 @@ enum Preset: CaseIterable, Identifiable, Sendable {
             s.reverbSize = 0.8
             s.reverbMix = 0.4
         case .crushed:
-            s.waveform = .square
+            s.oscillators = [
+                OscillatorSettings(waveform: .square, level: 0.8),
+                OscillatorSettings(waveform: .square, semitones: 7, level: 0.5),
+                OscillatorSettings(waveform: .sawtooth, semitones: -12, level: 0.3),
+            ]
             s.filter = .highPass
             s.cutoff = 150
             s.resonance = 0.2

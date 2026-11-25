@@ -162,6 +162,59 @@ private func impulse(_ frames: Int, channels: Int = 1) -> [Float] {
         chain.second.level = 1
         #expect(chain.first.frequency == 100)
     }
+
+    @Test func mixerAddsItsInputsAtTheirLevels() {
+        var mixer = Mixer([Constant(value: 0.5), Constant(value: 0.25)], levels: [1, 2])
+        let output = render(&mixer, silence(1_000, channels: 2), channels: 2)
+        #expect(output.allSatisfy { $0 == 1 })
+    }
+
+    @Test func mixerHandsEachInputTheBufferAsItCame() {
+        // The same signal through two inputs in parallel, at half each, adds
+        // back up to itself.
+        var mixer = Mixer([Gain(level: 1), Gain(level: 1)], levels: [0.5, 0.5])
+        let input = sine(440, frames: 4_800)
+        let output = render(&mixer, input)
+        #expect(output == input)
+    }
+
+    @Test func mixerSpreadsALevelChangeOverTheNextBuffer() {
+        var mixer = Mixer([Constant(value: 1)])
+        mixer.inputs[0].level = 0
+        let ramp = render(&mixer, silence(512))
+        // Down a step each frame, to 0 at the buffer's end.
+        #expect(abs(ramp[0] - (1 - 1.0 / 512)) < 1e-6)
+        #expect(abs(ramp[255] - 0.5) < 1e-6)
+        #expect(ramp[511] == 0)
+        #expect(render(&mixer, silence(512)).allSatisfy { $0 == 0 })
+    }
+
+    @Test func mixerTakesABufferLongerThanItsScratchAPartAtATime() {
+        var mixer = Mixer([Constant(value: 0.5), Constant(value: 0.5)])
+        mixer.inputs[1].level = 0
+        // 10 000 frames of stereo in one call, five times what it mixes at
+        // a time; the level's ramp still runs over the whole of it.
+        var samples = ContiguousArray(silence(10_000, channels: 2))
+        samples.withUnsafeMutableBufferPointer { pointer in
+            var span = pointer.mutableSpan
+            mixer.process(into: &span, channels: 2, sampleRate: 48_000)
+        }
+        for frame in [0, 2_047, 2_048, 4_999, 9_999] {
+            let expected = 0.5 + 0.5 * (1 - Float(frame + 1) / 10_000)
+            #expect(abs(samples[frame * 2] - expected) < 1e-5)
+            #expect(samples[frame * 2] == samples[frame * 2 + 1])
+        }
+    }
+}
+
+/// Fills the buffer with one value: a generator whose output is plain to
+/// check.
+private struct Constant: AudioProcessor {
+    var value: Float
+
+    mutating func process(into buffer: inout MutableSpan<Float>, channels: Int, sampleRate: Double) {
+        for index in 0..<buffer.count { buffer[index] = value }
+    }
 }
 
 // MARK: - Vult

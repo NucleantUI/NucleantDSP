@@ -6,8 +6,8 @@
 //  the seventh by a fixed table, summed and high-passed, run at twice the
 //  output's rate. The table, the detune and the mix follow the JP-8000's
 //  own DSP code as read and checked against its emulator at atosynth
-//  ("The Super Saw code", February 2026), turned from 24-bit fixed point
-//  into floating point; the high-pass at the pitch is Adam Szabo's ("How to
+//  ("The Super Saw code" and "JP80x0 MIDI to coefficient mapping",
+//  February 2026), turned from 24-bit fixed point into floating point; the high-pass at the pitch is Adam Szabo's ("How to
 //  Emulate the Super Saw", 2010).
 //
 
@@ -21,9 +21,13 @@ import Foundation
 ///     var lead = Supersaw(frequency: 220, detune: 0.5, mix: 0.7)
 ///
 /// Each side sawtooth is off the pitch by its entry in the JP-8000's table,
-/// 0, +128, −128, +408, −412, +704, −720, times `detune`·0.0196/128: at full
-/// detune the outer two are about 11% off (two semitones), the next two
-/// about 6%, the inner two 2%. The middle sawtooth is always at its own
+/// 0, +128, −128, +408, −412, +704, −720, times a base `detune` sets. `detune`
+/// is the JP-8000's detune knob, along its own curve: most of its travel is
+/// fine detune, the base climbing slowly, and the last few steps reach far.
+/// The outer two are 0.3% off the pitch at 13%, 1.1% at half way, 3.2% at
+/// 80%, and 11% (two semitones) at full detune, where the next two are
+/// about 6% off and the inner two 2%. Even at 0 the outer two are 0.6 cents
+/// off, as the knob's lowest step is. The middle sawtooth is always at its own
 /// level; `mix` raises the six others from 1/25 of it to 1.32 times it, in
 /// a straight line, as the JP-8000's mix control does. Their sum is
 /// high-passed at the pitch, which takes away what would rumble beneath
@@ -37,7 +41,8 @@ import Foundation
 public struct Supersaw: AudioProcessor {
     /// In hertz: the middle sawtooth's pitch.
     public var frequency: Float
-    /// 0…1: how far the side sawtooths are tuned off the pitch.
+    /// 0…1: how far the side sawtooths are tuned off the pitch: the
+    /// JP-8000's detune knob, from its first step to its last.
     public var detune: Float
     /// 0…1: how loud the six side sawtooths are against the middle one.
     public var mix: Float
@@ -50,9 +55,31 @@ public struct Supersaw: AudioProcessor {
     /// Each sawtooth's offset at full detune, in 128ths of the detune's
     /// base.
     private static let offsets: [Double] = [0, 128, -128, 408, -412, 704, -720]
-    /// The detune's base at full detune, a share of the pitch: the
-    /// JP-8000's largest detune, 164352, over 2²³.
-    private static let fullDetune = 164_352.0 / 8_388_608
+    /// The detune knob's 128 steps: the base each sets, in 1/16384ths of
+    /// the pitch (the JP-8000's 15-bit value, times 512, over 2²³). Up by 1
+    /// every second step to 63, every step to 80, by 2 to 120, then in
+    /// bigger jumps to 321.
+    private static let detuneSteps: [Double] = [
+        1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8,
+        9, 9, 10, 10, 11, 11, 12, 12, 13, 13, 14, 14, 15, 15, 16, 16,
+        17, 17, 18, 18, 19, 19, 20, 20, 21, 21, 22, 22, 23, 23, 24, 24,
+        25, 25, 26, 26, 27, 27, 28, 28, 29, 29, 30, 30, 31, 31, 32, 32,
+        33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48,
+        49, 51, 53, 55, 57, 59, 61, 63, 65, 67, 69, 71, 73, 75, 77, 79,
+        81, 83, 85, 87, 89, 91, 93, 95, 97, 99, 101, 103, 105, 107, 109, 111,
+        113, 115, 117, 119, 121, 123, 125, 127, 129, 137, 145, 153, 169, 193, 225, 321,
+    ]
+
+    /// The detune's base for `detune`, a share of the pitch: the knob's
+    /// step there, and between two steps a straight line from one to the
+    /// next.
+    private static func base(_ detune: Float) -> Double {
+        let position = Double(min(max(detune, 0), 1)) * 127
+        let step = min(Int(position), 126)
+        let between = position - Double(step)
+        let value = detuneSteps[step] + (detuneSteps[step + 1] - detuneSteps[step]) * between
+        return value / 16_384
+    }
     /// The middle sawtooth's level, and the side ones' at no mix and at
     /// full mix: 25, 1 and 33 128ths, the JP-8000's.
     private static let middleLevel = 25.0 / 128
@@ -82,7 +109,7 @@ public struct Supersaw: AudioProcessor {
         guard channels > 0 else { return }
         let rate = 2 * sampleRate
         let pitch = max(Double(frequency), 0)
-        let base = Double(min(max(detune, 0), 1)) * Supersaw.fullDetune / 128
+        let base = Supersaw.base(detune) / 128
         let mix = Double(min(max(mix, 0), 1))
         let middle = Supersaw.middleLevel
         let side = Supersaw.sideLevels.0 + (Supersaw.sideLevels.1 - Supersaw.sideLevels.0) * mix

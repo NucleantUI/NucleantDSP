@@ -3,8 +3,9 @@
 //  Synth
 //
 //  A panel per stage of the sound, in the order the sound goes through
-//  them: the voice's three oscillators, filter and envelope, then the
-//  drive, the delay and the reverb, and the volume.
+//  them: the voice's three oscillators (beside the scope, SynthView), its
+//  filter and envelope, then the drive, the delay and the reverb, and the
+//  volume.
 //
 
 import Foundation
@@ -55,16 +56,47 @@ extension Panel where Accessory == EmptyView {
     }
 }
 
-/// One of the voice's oscillators: its waveform, its tuning from the note
-/// (semitones, then cents), and its level in the voice's mix.
+/// The voice's three oscillators, one to a line, so they stack beside the
+/// scope rather than spreading across the window. Their knobs are in
+/// columns, named once on the title's line, over them.
 @View
-struct OscillatorPanel {
+struct Oscillators {
+    let model: SynthModel
+
+    var body: some View {
+        Panel("Oscillators") {
+            HStack(spacing: 4) {
+                ForEach(["Semi", "Fine", "Level"], id: \.self) { name in
+                    Text(name)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .frame(width: Knob.width)
+                }
+            }
+        } content: {
+            VStack(alignment: .leading, spacing: 10) {
+                ForEach(0..<3, id: \.self) { index in
+                    OscillatorRow(model: model, index: index)
+                }
+            }
+        }
+    }
+}
+
+/// One oscillator: its waveform, its tuning from the note (semitones, then
+/// cents), and its level in the voice's mix.
+@View
+struct OscillatorRow {
     let model: SynthModel
     let index: Int
 
     var body: some View {
         let settings = model.settings.oscillators[index]
-        Panel("Osc \(index + 1)") {
+        HStack(spacing: 12) {
+            Text("\(index + 1)")
+                .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                .foregroundStyle(Theme.label)
+                .frame(width: 14)
             Picker(selection: model.binding(\.oscillators[index].waveform)) {
                 Text("Sin").fixedSize().tag(Oscillator.Waveform.sine)
                 Text("Saw").fixedSize().tag(Oscillator.Waveform.sawtooth)
@@ -73,32 +105,28 @@ struct OscillatorPanel {
             }
             .pickerStyle(.segmented)
             .fixedSize()
-        } content: {
             HStack(spacing: 4) {
-                Knob(title: "Semi", position: model.knob(\.oscillators[index].semitones, -24...24),
+                Knob(title: nil, position: model.knob(\.oscillators[index].semitones, -24...24),
                      text: settings.semitones.signedText, bipolar: true)
-                Knob(title: "Fine", position: model.knob(\.oscillators[index].cents, .linear(-50...50)),
+                Knob(title: nil, position: model.knob(\.oscillators[index].cents, .linear(-50...50)),
                      text: settings.cents.centsText, bipolar: true)
-                Knob(title: "Level", position: model.knob(\.oscillators[index].level, .linear(0...1)),
+                Knob(title: nil, position: model.knob(\.oscillators[index].level, .linear(0...1)),
                      text: settings.level.percentText)
             }
         }
     }
 }
 
-/// Every panel, in three rows: the oscillators; the filter and the
-/// envelope; the drive and the effects.
+/// The panels after the oscillators, in two rows: the filter, its envelope
+/// and the amp envelope; the drive and the effects. A panel with a picker,
+/// and the output's, is as wide as what it holds; the others share what
+/// the row has left.
 @View
 struct Controls {
     @Bindable var model: SynthModel
 
     var body: some View {
         VStack(spacing: 12) {
-            HStack(spacing: 12) {
-                ForEach(0..<3, id: \.self) { index in
-                    OscillatorPanel(model: model, index: index)
-                }
-            }
             HStack(spacing: 12) {
                 Panel("Filter") {
                     Picker(selection: $model.settings.filter) {
@@ -112,24 +140,15 @@ struct Controls {
                     HStack(spacing: 4) {
                         Knob(title: "Cutoff", position: model.knob(\.cutoff, .exponential(40...16_000)),
                              text: model.settings.cutoff.hertzText)
-                        Knob(title: "Resonance", position: model.knob(\.resonance, .linear(0...1)),
+                        Knob(title: "Res", position: model.knob(\.resonance, .linear(0...1)),
                              text: model.settings.resonance.percentText)
-                        Knob(title: "Envelope", position: model.knob(\.envelopeAmount, .linear(0...1)),
-                             text: model.settings.envelopeAmount.percentText, tint: Theme.envelope)
+                        Knob(title: "Env", position: model.knob(\.envelopeAmount, .linear(0...1)),
+                             text: model.settings.envelopeAmount.percentText, tint: Theme.filterEnvelope)
                     }
                 }
-                Panel("Envelope") {
-                    HStack(spacing: 4) {
-                        Knob(title: "Attack", position: model.knob(\.attack, .exponential(0.001...4)),
-                             text: model.settings.attack.secondsText, tint: Theme.envelope)
-                        Knob(title: "Decay", position: model.knob(\.decay, .exponential(0.005...4)),
-                             text: model.settings.decay.secondsText, tint: Theme.envelope)
-                        Knob(title: "Sustain", position: model.knob(\.sustain, .linear(0...1)),
-                             text: model.settings.sustain.percentText, tint: Theme.envelope)
-                        Knob(title: "Release", position: model.knob(\.release, .exponential(0.005...6)),
-                             text: model.settings.release.secondsText, tint: Theme.envelope)
-                    }
-                }
+                .fixedSize(horizontal: true, vertical: false)
+                EnvelopePanel(title: "Filter Envelope", model: model, path: \.filterEnvelope, tint: Theme.filterEnvelope)
+                EnvelopePanel(title: "Amp Envelope", model: model, path: \.amplitude, tint: Theme.envelope)
             }
             HStack(spacing: 12) {
                 Panel("Drive") {
@@ -144,8 +163,7 @@ struct Controls {
                     Knob(title: "Amount", position: model.knob(\.driveAmount, .linear(0...1)),
                          text: model.settings.driveAmount.percentText, tint: Theme.drive)
                 }
-                // Wide enough for its title and every kind of drive.
-                .frame(width: 360)
+                .fixedSize(horizontal: true, vertical: false)
                 Panel("Delay") {
                     HStack(spacing: 4) {
                         Knob(title: "Time", position: model.knob(\.delayTime, .exponential(0.02...1.2)),
@@ -170,7 +188,32 @@ struct Controls {
                     Knob(title: "Volume", position: model.knob(\.volume, .linear(0...1)),
                          text: model.settings.volume.percentText)
                 }
-                .frame(width: 110)
+                .fixedSize(horizontal: true, vertical: false)
+            }
+        }
+    }
+}
+
+/// An envelope's four knobs, for the settings at `path`.
+@View
+struct EnvelopePanel {
+    let title: String
+    let model: SynthModel
+    let path: WritableKeyPath<SynthSettings, EnvelopeSettings>
+    let tint: Color
+
+    var body: some View {
+        let settings = model.settings[keyPath: path]
+        Panel(title) {
+            HStack(spacing: 4) {
+                Knob(title: "Attack", position: model.knob(path.appending(path: \.attack), .exponential(0.001...4)),
+                     text: settings.attack.secondsText, tint: tint)
+                Knob(title: "Decay", position: model.knob(path.appending(path: \.decay), .exponential(0.005...4)),
+                     text: settings.decay.secondsText, tint: tint)
+                Knob(title: "Sustain", position: model.knob(path.appending(path: \.sustain), .linear(0...1)),
+                     text: settings.sustain.percentText, tint: tint)
+                Knob(title: "Release", position: model.knob(path.appending(path: \.release), .exponential(0.005...6)),
+                     text: settings.release.secondsText, tint: tint)
             }
         }
     }

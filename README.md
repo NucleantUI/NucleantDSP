@@ -64,8 +64,8 @@ processor is a value: a copy carries on from the same state, on its own.
 
 [Demo/](Demo) is a polyphonic synth made of these processors, with a
 NucleantUI window: eight voices, each three oscillators in a `Mixer`, tuned
-in semitones and cents, through either filter and an envelope; then a
-drive, the delay and the reverb.
+in semitones and cents, through either filter, which its own envelope
+opens, and an amp envelope; then a drive, the delay and the reverb.
 
 - Its knobs and scope are PyShader shaders (`Demo/Shaders`).
 - `Scripts/compile_demo_shaders.py` compiles them to SPIR-V, which is kept

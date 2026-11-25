@@ -24,6 +24,14 @@ struct OscillatorSettings: Sendable, Equatable {
     var level: Float = 0
 }
 
+/// An envelope's four stages: times in seconds, the sustain 0…1.
+struct EnvelopeSettings: Sendable, Equatable {
+    var attack: Double
+    var decay: Double
+    var sustain: Float
+    var release: Double
+}
+
 /// What the synth sounds like: everything the panels change.
 struct SynthSettings: Sendable, Equatable {
     /// Every voice's three oscillators. The second, a few cents off the
@@ -41,13 +49,14 @@ struct SynthSettings: Sendable, Equatable {
     var cutoff: Float = 900
     /// 0…1, mapped onto each filter's own range.
     var resonance: Float = 0.35
-    /// 0…1: how far the envelope opens the filter, up to five octaves.
+    /// 0…1: how far the filter envelope opens the filter, up to five
+    /// octaves.
     var envelopeAmount: Float = 0.5
 
-    var attack = 0.01
-    var decay = 0.35
-    var sustain: Float = 0.6
-    var release = 0.4
+    /// How the filter opens and closes over a note.
+    var filterEnvelope = EnvelopeSettings(attack: 0.005, decay: 0.4, sustain: 0.3, release: 0.4)
+    /// How loud a note is over its life.
+    var amplitude = EnvelopeSettings(attack: 0.01, decay: 0.35, sustain: 0.6, release: 0.4)
 
     var drive: DriveKind = .saturation
     /// 0…1.
@@ -73,9 +82,9 @@ enum FilterKind: CaseIterable, Identifiable, Sendable {
 
     var name: String {
         switch self {
-        case .lowPass: "Low"
-        case .highPass: "High"
-        case .bandPass: "Band"
+        case .lowPass: "LP"
+        case .highPass: "HP"
+        case .bandPass: "BP"
         case .notch: "Notch"
         case .ladder: "Ladder"
         }
@@ -109,8 +118,8 @@ enum DriveKind: CaseIterable, Identifiable, Sendable {
     }
 }
 
-/// One note: three oscillators mixed, a filter and an envelope, rendered in
-/// mono.
+/// One note: three oscillators mixed, a filter its own envelope opens, and an
+/// envelope for its level, rendered in mono.
 struct Voice: Sendable {
     /// The MIDI note it plays, or nil while free.
     var note: Int?
@@ -120,11 +129,31 @@ struct Voice: Sendable {
     var oscillators = Mixer([Oscillator](repeating: Oscillator(.sawtooth, frequency: 440, amplitude: 0.2), count: 3))
     var stateVariable = StateVariableFilter(cutoff: 1_000)
     var ladder = LadderFilter(cutoff: 1_000)
-    var envelope = Envelope()
+    /// Its level over the note: applied to the sound.
+    var amplitude = Envelope()
+    /// How far the filter is open over the note: run over a block of ones,
+    /// so what it leaves is its own curve, and its level is read from it.
+    var filterEnvelope = Envelope()
+    private var contour = ContiguousArray<Float>(repeating: 0, count: Voice.block)
 
-    /// Samples rendered between two updates of the filter's cutoff from the
+    /// Samples rendered between two updates of the filter's cutoff from its
     /// envelope: short enough that a fast attack still sweeps.
     static let block = 64
+
+    mutating func open() {
+        amplitude.open()
+        filterEnvelope.open()
+    }
+
+    mutating func close() {
+        amplitude.close()
+        filterEnvelope.close()
+    }
+
+    mutating func reset() {
+        amplitude.reset()
+        filterEnvelope.reset()
+    }
 
     mutating func render(into samples: UnsafeMutableBufferPointer<Float>, settings: SynthSettings, sampleRate: Double) {
         guard let note else { return }
@@ -137,18 +166,22 @@ struct Voice: Sendable {
             oscillators.inputs[index].source.frequency = Float(440 * pow(2, semitones / 12))
             oscillators.inputs[index].level = tuning.level
         }
-        envelope.attack = settings.attack
-        envelope.decay = settings.decay
-        envelope.sustain = settings.sustain
-        envelope.release = settings.release
+        Voice.set(&amplitude, to: settings.amplitude)
+        Voice.set(&filterEnvelope, to: settings.filterEnvelope)
 
         var start = 0
         while start < samples.count {
             let end = min(start + Voice.block, samples.count)
             let pointer = UnsafeMutableBufferPointer(rebasing: samples[start..<end])
             var block = pointer.mutableSpan
-            // The envelope opens the filter by up to five octaves.
-            let opening = pow(2, 5 * Double(settings.envelopeAmount) * Double(envelope.level))
+            // The filter envelope opens the filter by up to five octaves.
+            let frames = end - start
+            contour.withUnsafeMutableBufferPointer { contour in
+                for index in 0..<frames { contour[index] = 1 }
+                var ones = UnsafeMutableBufferPointer(rebasing: contour[0..<frames]).mutableSpan
+                filterEnvelope.process(into: &ones, channels: 1, sampleRate: sampleRate)
+            }
+            let opening = pow(2, 5 * Double(settings.envelopeAmount) * Double(filterEnvelope.level))
             let cutoff = Float(min(Double(settings.cutoff) * opening, 18_000))
 
             oscillators.process(into: &block, channels: 1, sampleRate: sampleRate)
@@ -162,10 +195,17 @@ struct Voice: Sendable {
                 ladder.resonance = settings.resonance * 0.95
                 ladder.process(into: &block, channels: 1, sampleRate: sampleRate)
             }
-            envelope.process(into: &block, channels: 1, sampleRate: sampleRate)
+            amplitude.process(into: &block, channels: 1, sampleRate: sampleRate)
             start = end
         }
-        if !envelope.isActive { self.note = nil }
+        if !amplitude.isActive { self.note = nil }
+    }
+
+    private static func set(_ envelope: inout Envelope, to settings: EnvelopeSettings) {
+        envelope.attack = settings.attack
+        envelope.decay = settings.decay
+        envelope.sustain = settings.sustain
+        envelope.release = settings.release
     }
 }
 
@@ -207,21 +247,21 @@ struct SynthEngine: AudioProcessor {
             ?? voices.firstIndex { $0.note == nil }
             ?? voices.indices.min { voices[$0].startedAt < voices[$1].startedAt }!
         if voices[index].note != note {
-            voices[index].envelope.reset()
+            voices[index].reset()
         }
         voices[index].note = note
         voices[index].startedAt = started
-        voices[index].envelope.open()
+        voices[index].open()
     }
 
     mutating func noteOff(_ note: Int) {
         for index in voices.indices where voices[index].note == note {
-            voices[index].envelope.close()
+            voices[index].close()
         }
     }
 
     mutating func allNotesOff() {
-        for index in voices.indices { voices[index].envelope.close() }
+        for index in voices.indices { voices[index].close() }
     }
 
     mutating func process(into buffer: inout MutableSpan<Float>, channels: Int, sampleRate: Double) {

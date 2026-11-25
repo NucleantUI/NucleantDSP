@@ -9,7 +9,7 @@ A polyphonic synth made of NucleantDSP's processors, with knobs and a scope draw
 
 ## Overview
 
-@Image(source: "synth", alt: "The demo synth: a scope, panels of glowing knobs for three oscillators, the filter, envelope, drive, delay and reverb, and a two-octave keyboard.")
+@Image(source: "synth", alt: "The demo synth: three oscillators beside a scope, then glowing knobs for the filter, its envelope, the amp envelope, drive, delay and reverb, and a two-octave keyboard.")
 
 The button above opens it in your browser. It is the same Swift that runs as
 a window on macOS: built for WebAssembly, drawn with WebGPU, and played
@@ -40,13 +40,16 @@ swift run Synth
 `AudioPlayer` runs:
 
 - Eight voices. Each is three ``Oscillator``s mixed by a ``Mixer``, into a
-  ``StateVariableFilter`` or a ``LadderFilter``, into an ``Envelope``.
+  ``StateVariableFilter`` or a ``LadderFilter``, into an ``Envelope`` for its
+  level: the amp envelope.
 - Every oscillator has its own waveform, its tuning from the note in
   semitones and then cents (the fine tune), and its level in the mix. Two
   sawtooths a few cents apart beat against each other; a third an octave
   down fills out the bottom.
-- A voice renders 64 samples at a time, and between blocks the envelope's
-  level opens the filter by up to five octaves.
+- The filter has an ``Envelope`` of its own. It runs over a block of ones,
+  so what it leaves is its own curve. A voice renders 64 samples at a time,
+  and between blocks the filter envelope's level opens the filter by up to
+  five octaves.
 - The voices are summed, then go through the chosen shaper
   (``SoftSaturation``, ``CubicClipper``, ``Wavefolder`` or ``Bitcrusher``),
   a ``Delay``, a ``Reverb`` and a ``Gain``.

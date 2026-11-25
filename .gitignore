@@ -60,3 +60,12 @@ fastlane/report.xml
 fastlane/Preview.html
 fastlane/screenshots/**/*.png
 fastlane/test_output
+
+# macOS, Xcode/SwiftPM workspace state, and the lock file (never committed)
+.DS_Store
+.swiftpm/
+Package.resolved
+
+# The demo shaders' Python environment (uv sync in Demo/), and its lock file
+.venv/
+uv.lock

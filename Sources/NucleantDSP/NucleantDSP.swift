@@ -4,8 +4,9 @@
 //
 //  Audio processors, each an `AudioProcessor` from NucleantAudio's
 //  AudioProtocols: whatever runs one (NucleantAudio's `AudioPlayer`) plays
-//  it on every platform. Written in Swift (Oscillator, Gain, Biquad, Then),
-//  in C (Delay, Reverb), and in Vult, generated as C++ behind a C API
+//  it on every platform. Written in Swift (the oscillators, the envelope,
+//  Gain, the filters and equalizers, Oversampled, Mixer, Then), in C
+//  (Delay, Reverb), and in Vult, generated as C++ behind a C API
 //  (StateVariableFilter, LadderFilter, SoftSaturation, CubicClipper,
 //  Wavefolder, Bitcrusher).
 //

@@ -71,6 +71,8 @@ struct Header {
 @View
 struct SynthView {
     @State private var model = SynthModel()
+    /// Which page of panels is shown under the oscillators.
+    @State private var page = ControlPage.filter
     @FocusState private var hasKeys: Bool
     /// The note each computer key held down plays, so it is the one let go
     /// even if the octave changed meanwhile.
@@ -89,8 +91,11 @@ struct SynthView {
                     .cornerRadius(12)
             }
             .fixedSize(horizontal: false, vertical: true)
-            Controls(model: model)
-                .fixedSize(horizontal: false, vertical: true)
+            // The rest of the sound, a page at a time.
+            TabView(selection: $page, pages: ControlPage.allCases, title: \.title) { page in
+                Controls(model: model, page: page)
+            }
+            .fixedSize(horizontal: false, vertical: true)
             // The keys take what the panels leave, within reason.
             Keyboard(model: model)
                 .frame(minHeight: 110, maxHeight: 200)

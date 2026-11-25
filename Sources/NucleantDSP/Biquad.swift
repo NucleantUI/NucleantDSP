@@ -5,11 +5,6 @@
 
 import AudioProtocols
 import Foundation
-#if canImport(simd)
-import simd
-#else
-import kvSIMD
-#endif
 
 /// A second-order filter, its coefficients from Robert Bristow-Johnson's
 /// Audio EQ Cookbook. Channels are filtered four at a time, one in each lane
@@ -47,7 +42,7 @@ public struct Biquad: AudioProcessor {
     private var designed: (response: Response, frequency: Float, q: Float, sampleRate: Double)?
     /// Two delayed values per channel, four channels per vector: for channel
     /// group `g`, `state[2g]` and `state[2g + 1]`.
-    private var state: ContiguousArray<simd_float4> = []
+    private var state: ContiguousArray<SIMD4<Float>> = []
 
     public init(_ response: Response, frequency: Float, q: Float = 0.7071) {
         self.response = response
@@ -61,9 +56,9 @@ public struct Biquad: AudioProcessor {
         if state.count != groups * 2 {
             state = ContiguousArray(repeating: .zero, count: groups * 2)
         }
-        let b0 = simd_float4(repeating: coefficients.b0), b1 = simd_float4(repeating: coefficients.b1)
-        let b2 = simd_float4(repeating: coefficients.b2), a1 = simd_float4(repeating: coefficients.a1)
-        let a2 = simd_float4(repeating: coefficients.a2)
+        let b0 = SIMD4<Float>(repeating: coefficients.b0), b1 = SIMD4<Float>(repeating: coefficients.b1)
+        let b2 = SIMD4<Float>(repeating: coefficients.b2), a1 = SIMD4<Float>(repeating: coefficients.a1)
+        let a2 = SIMD4<Float>(repeating: coefficients.a2)
         buffer.withFrames(channels: channels) { samples, frames in
             state.withUnsafeMutableBufferPointer { state in
                 for group in 0..<groups {
@@ -72,7 +67,7 @@ public struct Biquad: AudioProcessor {
                     var z1 = state[group * 2], z2 = state[group * 2 + 1]
                     for frame in 0..<frames {
                         let sample = samples + frame * channels + first
-                        var x = simd_float4.zero
+                        var x = SIMD4<Float>.zero
                         for lane in 0..<lanes { x[lane] = sample[lane] }
                         // Direct form II, transposed.
                         let y = b0 * x + z1
@@ -96,7 +91,7 @@ public struct Biquad: AudioProcessor {
         // Worked out in Double, which is also where every platform has its
         // math functions (Android's Foundation has no Float overloads).
         let nyquist = sampleRate / 2
-        let f0 = simd_clamp(Double(frequency), 1, nyquist * 0.999)
+        let f0 = min(max(Double(frequency), 1), nyquist * 0.999)
         let w0 = 2 * Double.pi * f0 / sampleRate
         let cosW0 = cos(w0)
         let alpha = sin(w0) / (2 * max(Double(q), 0.0001))

@@ -5,11 +5,6 @@
 
 import AudioProtocols
 import Foundation
-#if canImport(simd)
-import simd
-#else
-import kvSIMD
-#endif
 
 /// Scales every sample by `level`. A change of level is reached over a few
 /// milliseconds rather than at once, so it does not click.
@@ -57,7 +52,7 @@ public struct Gain: AudioProcessor {
             // channel in it.
             let keep = Float(exp(-1 / (Gain.smoothing * sampleRate)))
             for frame in 0..<frames {
-                current = simd_mix(target, current, keep)
+                current = target + (current - target) * keep
                 if abs(current - target) < 1e-6 { current = target }
                 let sample = samples + frame * channels
                 for channel in 0..<channels { sample[channel] *= current }
@@ -68,12 +63,12 @@ public struct Gain: AudioProcessor {
     /// Four samples at a time, as one vector.
     private func scale(_ samples: UnsafeMutablePointer<Float>, count: Int, by factor: Float) {
         let raw = UnsafeMutableRawPointer(samples)
-        let vector = simd_float4(repeating: factor)
+        let vector = SIMD4<Float>(repeating: factor)
         var index = 0
         while index + 4 <= count {
             let offset = index * MemoryLayout<Float>.stride
-            let scaled = raw.loadUnaligned(fromByteOffset: offset, as: simd_float4.self) * vector
-            raw.storeBytes(of: scaled, toByteOffset: offset, as: simd_float4.self)
+            let scaled = raw.loadUnaligned(fromByteOffset: offset, as: SIMD4<Float>.self) * vector
+            raw.storeBytes(of: scaled, toByteOffset: offset, as: SIMD4<Float>.self)
             index += 4
         }
         while index < count {

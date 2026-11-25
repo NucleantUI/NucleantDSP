@@ -34,8 +34,8 @@ processor is a value: a copy carries on from the same state, on its own.
 | Processor | Written in | What it does |
 |---|---|---|
 | `Oscillator` | Swift | Sine, sawtooth, square and triangle. The sawtooth and square use PolyBLEP. |
-| `Gain` | Swift, simd | A level or decibels, with changes smoothed over 5 ms. |
-| `Biquad` | Swift, simd | Bristow-Johnson's cookbook filters: low-, high-, band- and all-pass, notch, peak, and low and high shelves. Four channels per vector. |
+| `Gain` | Swift, SIMD | A level or decibels, with changes smoothed over 5 ms. |
+| `Biquad` | Swift, SIMD | Bristow-Johnson's cookbook filters: low-, high-, band- and all-pass, notch, peak, and low and high shelves. Four channels per vector. |
 | `Then` | Swift | Two processors, one after the other. |
 | `StateVariableFilter` | Vult | Low-, high- and band-pass, and notch ([svf.vult](Vult/filters/svf.vult)). |
 | `LadderFilter` | Vult | A four-pole low-pass with resonance ([ladder.vult](Vult/filters/ladder.vult)). |
@@ -49,11 +49,8 @@ processor is a value: a copy carries on from the same state, on its own.
 ## Layout
 
 - **NucleantDSP**: the processors, as `AudioProcessor`s. It re-exports
-  AudioProtocols. It uses the `simd` module: Apple's on Apple platforms,
-  and [kvSIMD](https://github.com/keyvariable/kvSIMD.swift)'s
-  implementation of the same API on Linux, Android, Windows and
-  WebAssembly. The dependency is conditional, so Apple builds never fetch
-  it.
+  AudioProtocols. Its vectors are the standard library's SIMD types
+  (`SIMD4<Float>`), the same on every platform, with no simd module.
 - **CNucleantDSP**: the processors written in C, and the Vult ones. Swift
   imports only its plain C header (`include/CNucleantDSP.h`), so neither
   NucleantDSP nor anything using it needs C++ interop.

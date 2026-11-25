@@ -29,8 +29,6 @@ let package = Package(
         localDev
             ? .package(path: "../NucleantAudio")
             : .package(url: "https://github.com/NucleantUI/NucleantAudio.git", .upToNextMinor(from: "0.0.0")),
-        // The simd module where Apple's isn't: kvSIMD implements its API.
-        .package(url: "https://github.com/keyvariable/kvSIMD.swift.git", .upToNextMinor(from: "1.1.0")),
     ],
     targets: [
         // The processors written in C, and the C API around the ones Vult
@@ -44,14 +42,6 @@ let package = Package(
             dependencies: [
                 .product(name: "AudioProtocols", package: "NucleantAudio"),
                 "CNucleantDSP",
-                // `kvSIMD.forced` rather than `kvSIMD`: the latter picks by
-                // whether the *host* has simd, so a Mac building for Android
-                // or WebAssembly would get its empty placeholder.
-                .product(
-                    name: "kvSIMD.forced",
-                    package: "kvSIMD.swift",
-                    condition: .when(platforms: [.linux, .android, .windows, .wasi])
-                ),
             ]
         ),
         .testTarget(
